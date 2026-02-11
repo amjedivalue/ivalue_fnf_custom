@@ -4,6 +4,15 @@ app_publisher = "AmjedAltamimi"
 app_description = "Custom FNF"
 app_email = "amjed.altamimi@ivalueconsult.com"
 app_license = "mit"
+doctype_js = {
+    "Full and Final Statement": "public/js/full_and_final_statement.js",
+}
+
+fixtures = [
+    {"dt": "Custom Field", "filters": [["dt", "=", "Full and Final Statement"]]},
+    {"dt": "Property Setter", "filters": [["doc_type", "=", "Full and Final Statement"]]},
+]
+
 
 # Apps
 # ------------------

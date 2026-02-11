@@ -1,0 +1,34 @@
+[
+ {
+  "default_value": null,
+  "doc_type": "Full and Final Statement",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocField",
+  "field_name": "amended_from",
+  "is_system_generated": 0,
+  "modified": "2026-02-05 12:54:51.606319",
+  "module": null,
+  "name": "Full and Final Statement-amended_from-hidden",
+  "property": "hidden",
+  "property_type": "Check",
+  "row_name": null,
+  "value": "1"
+ },
+ {
+  "default_value": null,
+  "doc_type": "Full and Final Statement",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocType",
+  "field_name": null,
+  "is_system_generated": 0,
+  "modified": "2026-02-11 12:18:49.856779",
+  "module": null,
+  "name": "Full and Final Statement-main-field_order",
+  "property": "field_order",
+  "property_type": "Data",
+  "row_name": null,
+  "value": "[\"custom_section_break_sdzzs\", \"employee\", \"employee_name\", \"transaction_date\", \"column_break_12\", \"company\", \"status\", \"amended_from\", \"employee_details_section\", \"date_of_joining\", \"custom_column_break_ovgh7\", \"relieving_date\", \"custom_service_detalies\", \"custom_service_years\", \"custom_service_month\", \"custom_service_days\", \"custom_column_break_4j66v\", \"custom_total_of_years\", \"custom_column_break_iwq9g\", \"custom_section_break_l0eeo\", \"column_break_4\", \"designation\", \"custom_column_break_kwls0\", \"department\", \"section_break_8\", \"payables\", \"section_break_10\", \"receivables\", \"section_break_15\", \"assets_allocated\", \"totals_section\", \"total_payable_amount\", \"column_break_21\", \"total_receivable_amount\", \"custom_column_break_2k0je\", \"total_asset_recovery_cost\"]"
+ }
+]
