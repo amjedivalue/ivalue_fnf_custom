@@ -1,108 +1,118 @@
-const CHILD_DTYPE_NAME = "Full and Final Outstanding Statement";
+const CHILD_TABLE_DOCTYPE = "Full and Final Outstanding Statement";
+let isAutoFilling = false; // prevents loops during set_value + table fill
 
 frappe.ui.form.on("Full and Final Statement", {
   onload(frm) {
-    toggle_sections(frm, !!frm.doc.employee, false);
+    toggle_sections(frm, Boolean(frm.doc.employee), false);
 
-    // ✅ تعبئة Transaction Date بتاريخ اليوم إذا فاضي
     if (!frm.doc.transaction_date) {
       frm.set_value("transaction_date", frappe.datetime.get_today());
     }
 
-    // إذا الموظف موجود عند فتح الفورم، احسب مباشرة
     if (frm.doc.employee) {
-      recalc_full_and_final(frm);
+      recalculate_full_and_final(frm);
     }
   },
 
   async employee(frm) {
-    toggle_sections(frm, !!frm.doc.employee, true);
+    toggle_sections(frm, Boolean(frm.doc.employee), true);
+/**
+ * Toggle sections and recalculate full and final statement when employee is changed
+ * @param {frappe.ui.Form} frm - the form object
+ * @returns {Promise<void>}
+ */
 
-    // إذا تم حذف الموظف → تفريغ كل شيء
     if (!frm.doc.employee) {
-      clear_all(frm);
+      clear_all_fields(frm);
       return;
     }
 
-    await recalc_full_and_final(frm);
+    await recalculate_full_and_final(frm);
   },
 
   async transaction_date(frm) {
     if (!frm.doc.employee) return;
-    await recalc_full_and_final(frm);
+    await recalculate_full_and_final(frm);
   },
 
   async custom_recalculate(frm) {
     if (!frm.doc.employee) return;
-    await recalc_full_and_final(frm);
+    await recalculate_full_and_final(frm);
   },
 });
 
-async function recalc_full_and_final(frm) {
-  // ✅ Call واحد فقط
-  const r = await frm.call({
-    method: "ivalue_fnf_custom.api.full_and_final.get_full_and_final_payload",
-    args: {
-      employee: frm.doc.employee,
-      transaction_date: frm.doc.transaction_date,
-    },
-  });
+async function recalculate_full_and_final(frm) {
+  if (isAutoFilling) return;
+  isAutoFilling = true;
 
-  const data = r.message;
+  try {
+    const response = await frm.call({
+      method: "ivalue_fnf_custom.api.full_and_final.get_full_and_final_payload",
+      args: {
+        employee: frm.doc.employee,
+        transaction_date: frm.doc.transaction_date,
+      },
+    });
 
-  if (!data || !data.ok) {
-    frappe.msgprint(data?.msg || "Unable to calculate Full & Final.");
-    return;
+    const payload = response.message;
+
+    if (!payload || !payload.ok) {
+      frappe.msgprint(payload?.msg || "Unable to calculate Full & Final.");
+      return;
+    }
+
+    if (payload.note) {
+      frappe.msgprint({
+        title: "Note",
+        message: payload.note,
+        indicator: "orange",
+      });
+    }
+
+    // ===== Service fields
+    await frm.set_value("custom_service_years", payload.service?.years || 0);
+    await frm.set_value("custom_service_month", payload.service?.months || 0);
+    await frm.set_value("custom_service_days", payload.service?.days || 0);
+    await frm.set_value("custom_total_of_years", payload.service?.custom_total_of_years || 0);
+
+    // ===== Totals
+    await frm.set_value("total_payable_amount", flt(payload.totals?.total_payable || 0));
+
+    // ===== Payables child table
+    frm.clear_table("payables");
+
+    (payload.payables || []).forEach((serverRow) => {
+      const childRow = frm.add_child("payables");
+
+      childRow.component = serverRow.component || "";
+      childRow.day_count = flt(serverRow.day_count ?? serverRow.worked_days ?? 0);
+      childRow.amount = flt(serverRow.amount ?? serverRow.auto_amount ?? 0);
+
+      childRow.reference_document_type = serverRow.reference_document_type || "";
+      childRow.reference_document = serverRow.reference_document || "";
+
+      // optional columns (only if present in your child doctype)
+      if (childRow.rate_per_day !== undefined) {
+        childRow.rate_per_day = flt(serverRow.rate_per_day || 0);
+      }
+      if (childRow.worked_days !== undefined) {
+        childRow.worked_days = flt(serverRow.worked_days || 0);
+      }
+      if (childRow.auto_amount !== undefined) {
+        childRow.auto_amount = flt(serverRow.auto_amount || serverRow.amount || 0);
+      }
+    });
+
+    frm.refresh_field("payables");
+
+    // re-check total from table
+    update_total_from_table(frm);
+  } finally {
+    isAutoFilling = false;
   }
-
-  // ✅ تعبئة حقول الخدمة + totals
-  frm.set_value({
-    custom_service_years: data.service?.years || 0,
-    custom_service_month: data.service?.months || 0,
-    custom_service_days: data.service?.days || 0,
-    custom_total_of_years: data.service?.custom_total_of_years || 0,
-
-    custom_leave_encashment_amount: flt(data.totals?.leave_encashment_amount || 0),
-
-    // total_payable_amount يتعبى من totals
-    total_payable_amount: flt(data.totals?.total_payable || 0),
-  });
-
-  // ✅ تعبئة جدول Payables بالأعمدة اللي عندك (Amount/Day count/Reference*)
-  frm.clear_table("payables");
-
-  (data.payables || []).forEach((row) => {
-    const child = frm.add_child("payables");
-
-    // component
-    child.component = row.component || "";
-
-    // ✅ مهم: عبّي الأعمدة مباشرة (بدون if على قيمة الحقل)
-    child.day_count = flt(row.day_count || 0);
-    child.amount = flt(row.amount || 0);
-
-    child.reference_document_type = row.reference_document_type || "";
-    child.reference_document = row.reference_document || "";
-
-    // ✅ لو في حقول إضافية موجودة عندك (مش ضروري لكنها ما بتضر)
-    if (child.worked_days !== undefined) {
-      child.worked_days = flt(row.worked_days || 0);
-    }
-    if (child.rate_per_day !== undefined) {
-      child.rate_per_day = flt(row.rate_per_day || 0);
-    }
-    if (child.auto_amount !== undefined) {
-      child.auto_amount = flt(row.auto_amount || row.amount || 0);
-    }
-  });
-
-  frm.refresh_field("payables");
 }
 
-/* -----------------------------------------------------------
-   تفريغ كل البيانات عند حذف الموظف
------------------------------------------------------------ */
-function clear_all(frm) {
+function clear_all_fields(frm) {
   frm.clear_table("payables");
   frm.refresh_field("payables");
 
@@ -111,16 +121,12 @@ function clear_all(frm) {
     custom_service_month: 0,
     custom_service_days: 0,
     custom_total_of_years: 0,
-    custom_leave_encashment_amount: 0,
     total_payable_amount: 0,
   });
 }
 
-/* -----------------------------------------------------------
-   التحكم في ظهور الأقسام
------------------------------------------------------------ */
-function toggle_sections(frm, show, animate = true) {
-  const sections = [
+function toggle_sections(frm, shouldShow, animate = true) {
+  const sectionFieldnames = [
     "custom_service_detalies",
     "section_break_8",
     "section_break_10",
@@ -130,12 +136,12 @@ function toggle_sections(frm, show, animate = true) {
     "custom_final_settlement_section",
   ];
 
-  sections.forEach((sec) => {
-    const field = frm.get_field(sec);
+  sectionFieldnames.forEach((fieldname) => {
+    const field = frm.get_field(fieldname);
     if (!field) return;
 
     const wrapper = $(field.wrapper);
-    if (show) {
+    if (shouldShow) {
       animate ? wrapper.stop().slideDown(400) : wrapper.show();
     } else {
       animate ? wrapper.stop().slideUp(400) : wrapper.hide();
@@ -143,20 +149,21 @@ function toggle_sections(frm, show, animate = true) {
   });
 }
 
-/* -----------------------------------------------------------
-   لو المستخدم عدّل day_count أو rate_per_day يدويًا
-   نحسب amount ونحدّث Total Payable
------------------------------------------------------------ */
-frappe.ui.form.on(CHILD_DTYPE_NAME, {
+// =========================================================
+// Manual edits in child table
+// =========================================================
+frappe.ui.form.on(CHILD_TABLE_DOCTYPE, {
   day_count(frm, cdt, cdn) {
-    recalc_row_amount(frm, cdt, cdn);
+    if (isAutoFilling) return;
+    recalculate_row_amount(frm, cdt, cdn);
   },
   rate_per_day(frm, cdt, cdn) {
-    recalc_row_amount(frm, cdt, cdn);
+    if (isAutoFilling) return;
+    recalculate_row_amount(frm, cdt, cdn);
   },
 });
 
-function recalc_row_amount(frm, cdt, cdn) {
+function recalculate_row_amount(frm, cdt, cdn) {
   const row = locals[cdt][cdn];
 
   const days = flt(row.day_count || 0);
@@ -164,20 +171,20 @@ function recalc_row_amount(frm, cdt, cdn) {
 
   let amount = days * rate;
 
-  // Worked Day cap 30
   if ((row.component || "").trim() === "Worked Day") {
     amount = Math.min(days, 30) * rate;
   }
 
-  // ✅ اكتب الناتج على amount
   frappe.model.set_value(cdt, cdn, "amount", amount);
 
-  // ✅ حدّث total_payable_amount من جدول payables
+  update_total_from_table(frm);
+  frm.refresh_field("payables");
+}
+
+function update_total_from_table(frm) {
   let total = 0;
-  (frm.doc.payables || []).forEach((r) => {
-    total += flt(r.amount || 0);
+  (frm.doc.payables || []).forEach((row) => {
+    total += flt(row.amount || 0);
   });
   frm.set_value("total_payable_amount", total);
-
-  frm.refresh_field("payables");
 }
