@@ -144,6 +144,56 @@ def inclusive_days(start_date, end_date):
 
 
 # =========================================================
+# ✅ إضافة فقط: حساب مدة الخدمة بناء على تاريخ الانضمام
+# =========================================================
+def calculate_service_fields_from_doj(doj, calc_date):
+    """
+    يحسب:
+    - custom_service_years
+    - custom_service_month
+    - custom_service_days
+    - custom_total_of_years
+
+    مبني على تاريخ الانضمام (doj) → إلى calc_date
+    """
+    if not doj or not calc_date:
+        return {
+            "custom_service_years": 0,
+            "custom_total_of_years": 0,
+            "custom_service_month": 0,
+            "custom_service_days": 0
+        }
+
+    doj = getdate(doj)
+    calc_date = getdate(calc_date)
+
+    if calc_date < doj:
+        return {
+            "custom_service_years": 0,
+            "custom_total_of_years": 0,
+            "custom_service_month": 0,
+            "custom_service_days": 0
+        }
+
+    rd = relativedelta(calc_date, doj)
+
+    years = int(rd.years or 0)
+    months = int(rd.months or 0)
+    days = int(rd.days or 0)
+
+    # Total years كرقم عشري (inclusive days / 365)
+    total_days = inclusive_days(doj, calc_date)
+    total_years = flt(total_days / 365.0)
+
+    return {
+        "custom_service_years": years,
+        "custom_total_of_years": total_years,
+        "custom_service_month": months,
+        "custom_service_days": days
+    }
+
+
+# =========================================================
 # نقرر تاريخ الحساب
 # =========================================================
 def get_calc_date(employee_id, transaction_date=None):
@@ -306,6 +356,9 @@ def get_full_and_final_payload(employee, transaction_date=None):
     doj = frappe.db.get_value("Employee", employee, "date_of_joining")
     doj = getdate(doj)
 
+    # ✅ إضافة فقط: حساب مدة الخدمة من تاريخ الانضمام
+    service_fields = calculate_service_fields_from_doj(doj, calc_date)
+
     # افترض السنوي 21 (تقدر تربطه بالسيستم لاحقاً)
     annual_leave = 21
 
@@ -336,5 +389,11 @@ def get_full_and_final_payload(employee, transaction_date=None):
         "payables": payables,
         "totals": {
             "total_payable": total
-        }
+        },
+
+        # ✅ إضافة فقط: رجّع الحقول للفرونت
+        "custom_service_years": service_fields.get("custom_service_years"),
+        "custom_total_of_years": service_fields.get("custom_total_of_years"),
+        "custom_service_month": service_fields.get("custom_service_month"),
+        "custom_service_days": service_fields.get("custom_service_days"),
     }

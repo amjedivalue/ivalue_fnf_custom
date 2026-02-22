@@ -87,6 +87,14 @@ async function calculate_full_and_final(frm) {
     // نحسب التوتل من الجدول
     update_total(frm);
 
+    // ==================================================
+    // ✅ إضافة فقط: تعبئة حقول مدة الخدمة
+    // ==================================================
+    frm.set_value("custom_service_years", cint(data.custom_service_years || 0));
+    frm.set_value("custom_total_of_years", flt(data.custom_total_of_years || 0));
+    frm.set_value("custom_service_month", cint(data.custom_service_month || 0));
+    frm.set_value("custom_service_days", cint(data.custom_service_days || 0));
+
   } finally {
     systemIsFilling = false;
   }
@@ -104,6 +112,12 @@ function clear_everything(frm) {
   frm.refresh_field("payables");
 
   frm.set_value("total_payable_amount", 0);
+
+  // (اختياري – إذا بدك تصفيرهم لما ينشال الموظف)
+  // frm.set_value("custom_service_years", 0);
+  // frm.set_value("custom_total_of_years", 0);
+  // frm.set_value("custom_service_month", 0);
+  // frm.set_value("custom_service_days", 0);
 
   systemIsFilling = false;
 }
